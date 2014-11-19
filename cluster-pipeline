@@ -1,0 +1,53 @@
+#!/bin/bash -l
+fastafi=$1
+
+#Trim fasta file to $4 bp
+
+trimfi=${fastafi%.*}_$4.fasta
+#trimfi80=${fastafi%.*}_80.fasta
+echo $fastafi $trimfi
+#TRIM FILE TO DESIRED SIZE
+perl trim_to_bases.pl $fastafi $4 "e" $trimfi
+#perl trim_to_bases.pl $fastafi 80 $trimfi80
+
+thresh1=$2
+thresh2=$3
+firstrunuc=${trimfi%fasta}1strun.uc
+firstrunfa=${trimfi%fasta}1strun.fasta
+secondrunuc=${trimfi%fasta}2ndrun.uc
+secondrunfa=${trimfi%fasta}2ndrun.fasta
+mapback=${trimfi%fasta}mapback.uc
+filtfa=${trimfi%fasta}filt.fasta
+
+#FIRST RUN FOR CLUSTERING
+usearch -cluster $trimfi -uc $firstrunuc -gapopen 2I -gapext 0.5 -maxaccepts 0 -maxrejects 0 -iddef 1 -usersort -id $thresh1
+usearch -cluster $trimfi -consout $firstrunfa -gapopen 2I -gapext 0.5 -maxaccepts 0 -maxrejects 0 -iddef 1 -usersort -id $thresh1
+#usearch -cluster $trimfi -uc $firstrunu -maxaccepts 0 -maxrejects 0 -iddef 1 -usersort -id $thresh1
+#usearch -cluster $trimfi -consout $firstrunfa -maxaccepts 0 -maxrejects 0 -iddef 1 -usersort -id $thresh1
+
+# REMOVE CLUSTERS WITH TWO READS IN THEM
+perl filterbycounts.pl $firstrunuc 2 $firstrunfa > $filtfa
+
+#newtrim=${filtfa%fasta}_80.fasta
+newtrim=$filtfa
+
+#perl trim_to_bases.pl $filtfa 80 $newtrim
+
+#SECOND ROUND OF CLUSTERING
+usearch -cluster $newtrim -uc $secondrunuc -gapopen 2I -gapext 0.5 -maxaccepts 0 -maxrejects 0 -iddef 1 -usersort -id $thresh2
+usearch -cluster $newtrim -consout $secondrunfa -gapopen 2I -gapext 0.5 -maxaccepts 0 -maxrejects 0 -iddef 1 -usersort -id $thresh2
+
+#MAPPING OF READS TO CLUSTERS
+usearch --query $trimfi --db $secondrunfa -uc $mapback -global -gapopen 2I -gapext 0.5 -iddef 1 -usersort -id 0.85
+
+curfile=${trimfi%fasta}cur
+readdist=${trimfi%fasta}reads.txt
+
+#FINDING THE READ Distribution and cluster distributions
+perl combinetwouc.pl $firstrunuc $secondrunuc > $curfile
+perl cluster_distribution.pl $curfile >$readdist
+
+largest=${trimfi%fasta}largest.fasta
+perl find_largest.pl $mapback $fastafi >$largest
+
+
